@@ -1,0 +1,7 @@
+domain: corinternal.com
+repo: hostinfo
+resources:
+- group: topology
+  kind: HostInfo
+  version: v1
+version: "2"

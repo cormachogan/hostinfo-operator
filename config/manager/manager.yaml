@@ -1,0 +1,59 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  labels:
+    control-plane: controller-manager
+  name: system
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: controller-manager
+  namespace: system
+  labels:
+    control-plane: controller-manager
+spec:
+  selector:
+    matchLabels:
+      control-plane: controller-manager
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        control-plane: controller-manager
+    spec:
+      containers:
+      - command:
+        - /manager
+        args:
+        - --enable-leader-election
+        image: controller:latest
+        name: manager
+        resources:
+          limits:
+            cpu: 100m
+            memory: 30Mi
+          requests:
+            cpu: 100m
+            memory: 20Mi
+        env:
+          - name: GOVMOMI_USERNAME
+            valueFrom:
+              secretKeyRef:
+                name: vc-creds
+                key: GOVMOMI_USERNAME
+          - name: GOVMOMI_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: vc-creds
+                key: GOVMOMI_PASSWORD
+          - name: GOVMOMI_URL
+            valueFrom:
+              secretKeyRef:
+                name: vc-creds
+                key: GOVMOMI_URL
+      volumes:
+        - name: vc-creds
+          secret:
+            secretName: vc-creds
+      terminationGracePeriodSeconds: 10

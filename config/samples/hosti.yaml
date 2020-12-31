@@ -1,0 +1,7 @@
+apiVersion: topology.corinternal.com/v1
+kind: HostInfo
+metadata:
+  name: hostinfo-i
+spec:
+  # Add fields here
+  hostname: esxi-dell-i.rainpole.com

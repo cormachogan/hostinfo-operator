@@ -1,0 +1,20 @@
+# permissions for end users to view hostinfoes.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: hostinfo-viewer-role
+rules:
+- apiGroups:
+  - topology.corinternal.com
+  resources:
+  - hostinfoes
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - topology.corinternal.com
+  resources:
+  - hostinfoes/status
+  verbs:
+  - get

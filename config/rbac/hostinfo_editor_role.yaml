@@ -1,0 +1,24 @@
+# permissions for end users to edit hostinfoes.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: hostinfo-editor-role
+rules:
+- apiGroups:
+  - topology.corinternal.com
+  resources:
+  - hostinfoes
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - topology.corinternal.com
+  resources:
+  - hostinfoes/status
+  verbs:
+  - get
