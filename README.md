@@ -1,57 +1,64 @@
 # A simple Kubernetes Operator to return VMware ESXi host information #
 
-This repository contains a very simple Kubernetes Operator that uses VMware's govmomi to return some simple ESXi host information through the status field of a Custom Resource, HostInfo. This code is for education purposes only, showing one way in which the code in a Kubernetes controller can access the underlying vSphere resources for the purposes of querying those resources.
-The CRD is built using [kubebuilder](https://go.kubebuilder.io/).
+This repository contains a very simple Kubernetes Operator that uses VMware's __govmomi__ to return some simple ESXi host information through the status field of a __Custom Resource (CR)__, which is called ```HostInfo```. This will require us to extend Kubernetes with a new __Custom Resource Definition (CRD)__. The code shown here is for education purposes only, showing one way in which a Kubernetes controller / operator can access the underlying vSphere infrastructure for the purposes of querying resources.
+
+You can think of a CRD as representing the desired state of a Kubernetes object or Custom Resource, and the function of the operator is to run the logic or code to make that desired state happen - in other words the operator has the logic to do whatever is necessary to achieve the object's desired state.
 
 ## What are we going to do in this tutorial? ##
 
-In this example, we will create a CRD called HostInfo. HostInfo will contain the name of an ESXi host in its specification. When a Custom Resource object is created, and subsequently queried, the Total CPU and Free CPU from the ESXi host will be returned in the status fields of the yaml output.
+In this example, we will create a CRD called ```HostInfo```. HostInfo will contain the name of an ESXi host in its specification. When a Custom Resource (CR) is created and subsequently queried, we will call an operator (logic in a controller) whereby the Total CPU and Free CPU from the ESXi host will be returned via the status fields of the object through govmomi API calls.
 
 The following will be created as part of this tutorial:
 
-* A Customer Resource Definition (CRD)
-  * Group: Topology
-    * Kind: HostInfo
-    * Version: V1
-    * Spec.Hostname
+* A __Customer Resource Definition (CRD)__
+  * Group: ```Topology```
+    * Kind: ```HostInfo```
+    * Version: ```v1```
+    * Specification will include a single item: ```Spec.Hostname```
 
-* One of more HostInfo CR/Object manifests, each containing the name of an ESXi host that we wish to query.
-  * Status.TotalCPU
-  * Status.FreeCPU
+* One or more __HostInfo Custom Resource / Object__ will be created through yaml manifests, each manifest containing the hostname of an ESXi host that we wish to query. The fields which will be updated to contain the relevant information from the ESXi host (when the CR is queried) are:
+  * ```Status.TotalCPU```
+  * ```Status.FreeCPU```
+
+* An __Operator__ (or business logic) to retrieve the Total and Free CPU from the ESXi host specified in the CR will be coded in the controller for this CR.
 
 ## What is not covered in this tutorial? ##
 
-The assumption is that you already have a working Kubernetes cluster. Installation and Deployment of Kubernetes is outside the scope of this tutorial. If you do not have a Kubernetes cluster consider using KinD, Kubernetes in Docker. A quickstaart guide can be found here:
+The assumption is that you already have a working Kubernetes cluster. Installation and deployment of a Kubernetes is outside the scope of this tutorial. If you do not have a Kubernetes cluster available, consider using __Kubernetes in Docker__ (shortened to __Kind__) which uses containers as Kubernetes nodes. A quickstart guide can be found here:
 
-* Kind (Kubernetes in Docker) - <https://kind.sigs.K8s.io/docs/user/quick-start/>
+* [Kind (Kubernetes in Docker)](https://kind.sigs.K8s.io/docs/user/quick-start/)
 
-The assumption is that you also have a vSphere environment comprising of at least one ESXi host managed by a vCenter server. While the thought process is that your Kubernetes cluster will be running on vSphere infrastructure, and thus this operator will help you examine how the underlying vSphere resources are being consumed by the Kubernetes clusters running on top, it is not necessary for this to be the case for the purposes of this tutorial.
+The assumption is that you also have a __VMware vSphere environment__ comprising of at least one ESXi hypervisor which is managed by a vCenter server. While the thought process is that your Kubernetes cluster will be running on vSphere infrastructure, and thus this operator will help you examine how the underlying vSphere resources are being consumed by the Kubernetes clusters running on top, it is not necessary for this to be the case for the purposes of this tutorial. You can use this code to query any vSphere environment from Kubernetes.
 
 ## What if I just want to understand some basic CRD concepts? ##
 
-If this sounds even too daunting at this stage, I strongly recommend checking out the excellent tutorial on CRDs from my friend and colleague, Rafael Brito's [RockBand](https://github.com/brito-rafa/k8s-webhooks/blob/master/single-gvk/README.md) CRD demonstration. In that tutorial, he uses some very simple concepts to explains how CRDs work.
+If this sounds even too daunting at this stage, I strongly recommend checking out the excellent tutorial on CRDs from my colleague, __Rafael Brito__. His [RockBand](https://github.com/brito-rafa/k8s-webhooks/blob/master/single-gvk/README.md) CRD tutorial uses some very simple concepts to explain how CRDs, CRs, Operators, spec and status fields work.
 
 ## Step 1 - Software Requirements ##
 
-You will need the following components pre-installed on your desktop or workstation before we can build the CRD.
+You will need the following components pre-installed on your desktop or workstation before we can build the CRD and operator.
 
-* git client - Apple Xcode or any git command line
-* [Go (v1.13+)](https://golang.org/dl/)
+* A __git__ client/command line
+* [Go (v1.15+)](https://golang.org/dl/) - earlier versions may work but I used v1.15.
 * [Docker Desktop](https://www.docker.com/products/docker-desktop)
 * [Kubebuilder](https://go.kubebuilder.io/quick-start.html)
 * [Kustomize](https://kubernetes-sigs.github.io/kustomize/installation/)
 * Access to a Container Image Repositor (docker.io, quay.io, harbor)
 
+If you are interested in learning more about Golang basics, I found [this site](https://tour.golang.org/welcome/1) very helpful.
+
 ## Step 2 - KubeBuilder Scaffolding ##
 
-I'm not going to spend a great deal of time talking about this. Suffice to say that KubeBuilder builds a template like experience for the creation of CRDs. We will build the scaffolding, and then add our own logic to query and return ESXi host CPU statistics as we go through the steps.
+The CRD is built using [kubebuilder](https://go.kubebuilder.io/).  I'm not going to spend a great deal of time talking about __KubeBuilder__. Suffice to say that KubeBuilder builds a directory structure containing all of the templates (or scaffolding) necessary for the creation of CRDs. Once this scaffolding is in place, this turorial will show you how to add your own specification fields and status fields, as well as how to add your own operator logic. In this example, our logic will login to vSphere, query and return ESXi host CPU statistics via a Kubernetes CR / object / Kind called HostInfo, the values of which will be used to populate status fields in our CRs.
+
+The following steps will create the scaffolding to get started.
 
 ```cmd
-mkdir hostinfo
+$ mkdir hostinfo
 $ cd hostinfo
 ```
 
-Next, define the Go module name of your CRD. In my case, I have called it hostinfo. This create a go.mod file with the name of the module and the Go version (v1.15 here).
+Next, define the Go module name of your CRD. In my case, I have called it __hostinfo__. This creates a __go.mod__ file with the name of the module and the Go version (v1.15 here).
 
 ```cmd
 $ go mod init hostinfo
@@ -68,12 +75,17 @@ $ cat go.mod
 module hostinfo
 
 go 1.15
-$
 ```
 
-The following commands will create a directory structure which contains all the scaffolding necessary to build an operator. You may choose an alternate domain here.
+Now we can proceed with building out the rest of the directory structure. The following __kubebuilder__ commands (__init__ and __create api__) creates all the scaffolding necessary to build our CRD and operator. You may choose an alternate __domain__ here if you wish. Simply make note of it as you will be referring to it later in the tutorial.
 
-```text
+```cmd
+kubebuilder init --domain corinternal.com
+```
+
+Here is what the output from the command looks like:
+
+```cmd
 $ kubebuilder init --domain corinternal.com
 Writing scaffold for you to edit...
 Get controller runtime:
@@ -95,7 +107,18 @@ $
 
 As the output from the previous command states, we must now define a resource. To do that, we again use kubebuilder to create the resource, specifying the API group, its version and supported kind. My group is called topology, my kind is called HostInfo and my initial version is v1.
 
-```text
+```cmd
+kubebuilder create api \
+--group topology       \
+--version v1           \
+--kind HostInfo        \
+--resource=true        \
+--controller=true
+```
+
+Here is the output from that command:
+
+```cmd
 $ kubebuilder create api --group topology --version v1 --kind HostInfo --resource=true --controller=true
 Writing scaffold for you to edit...
 api/v1/hostinfo_types.go
@@ -110,13 +133,13 @@ go vet ./...
 go build -o bin/manager main.go
 ```
 
-Our operator scaffolding (directory structure) is now in place. The next step is to implement our logic.
+Our operator scaffolding (directory structure) is now in place. The next step is to define the specification and status fields in our CRD. After that, we create the controller logic which will watch our Custom Resources, and bring them to desired state (called a reconcile operation). More on this shortly.
 
 ## Step 3 - Create the CRD ##
 
-Customer Resource Definitions [CRD](https://kubernetes.io/docs/concepts/extend-kubernetes/api-extension/custom-resources/) are a way to extend Kubernetes through Custom Resources. We are going to extend my Kubernetes cluster with a new custom resource called HostInfo which will retrieve information from an ESXi host. Thus, I will need to create a CRD which defines the specification of the custom resource, and the status fields that it returns. This is done by modifying the api/__version__/__crd__\_types.go file. In this tutorial, that file is called __api/v1/hostinfo_types.go__.
+Customer Resource Definitions [CRD](https://kubernetes.io/docs/concepts/extend-kubernetes/api-extension/custom-resources/) are a way to extend Kubernetes through Custom Resources. We are going to extend a Kubernetes cluster with a new custom resource called __HostInfo__ which will retrieve information from an ESXi host placed whose name is specified in a Custom Resource. Thus, I will need to create a field called hostname in the CRD - this defines the specification of the custom resource. We also add two status fields, as these will be used to return information like TotalCPU and FreeCPU from the ESXi host.
 
-Here is the scaffolding provided by kubebuilder:
+This is done by modifying the __api/v1/hostinfo_types.go__ file. Here is the initial scaffolding / template provided by kubebuilder:
 
 ```go
 // HostInfoSpec defines the desired state of HostInfo
@@ -135,12 +158,11 @@ type HostInfoStatus struct {
 }
 
 // +kubebuilder:object:root=true
-
 ```
 
-Here is the file after it has been modified to include a single __spec.hostname__ field and to return two __status__ fields. There are also a number of kubebuilder fields added, which are used to do validation and other kubebuilder functions which are outside the scope of this discussion.
+This file is modified to include a single __spec.hostname__ field and to return two __status__ fields. There are also a number of kubebuilder fields added, which are used to do validation and other kubebuilder related functions. The shortname "ch" will be used later on in our controller logic. Also, when we query any Custom Resources created with the CRD, e.g. ```kubectl get hostinfo```, we want the output to display the hostname of the ESXi host.
 
-Note that what we are doing here is for education purposes only. Typically what you would observe is that the spec and status fields would be similar, and it is the function of the controller to reconcile and differences between the two to achieve eventual consistency.
+Note that what we are doing here is for education purposes only. Typically what you would observe is that the spec and status fields would be similar, and it is the function of the controller to reconcile and differences between the two to achieve eventual consistency. But we are keeping things simple, as the purpose here is to show how vSphere can be queried from a Kubernetes Operator. Below is a snippet of the __hostinfo_types.go__ showing the code changes. The code-complete [hostinfo_types.go](api/v1/hostinfo_types.go) is here.
 
 ```go
 // HostInfoSpec defines the desired state of HostInfo
@@ -159,26 +181,31 @@ type HostInfoStatus struct {
 // +kubebuilder:printcolumn:name="Hostname",type=string,JSONPath=`.spec.hostname`
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
-
 ```
 
-We are now ready to create the CRD. There is one final step however, and this involves updating the Makefile. In the default Makefile, the following CRD appears:
+We are now ready to create the CRD. There is one final step however, and this involves updating the __Makefile__ which kubebuilder has created for us. In the default Makefile created by kubebuilder, the following __CRD_OPTIONS__ line appears:
 
 ```Makefile
 # Produce CRDs that work back to Kubernetes 1.11 (no version conversion)
 CRD_OPTIONS ?= "crd:trivialVersions=true"
 ```
 
-This CRD_OPTIONS entry will need to be changed to the following:
+This CRD_OPTIONS entry should be changed to the following:
 
 ```Makefile
 # Produce CRDs that work back to Kubernetes 1.11 (no version conversion)
 CRD_OPTIONS ?= "crd:preserveUnknownFields=false,crdVersions=v1,trivialVersions=true"
 ```
 
-Now we can build our CRD based on the spec and status fields that we have place in the __api/v1/hostinfo_types.go__ file.
+Now we can build our CRD with the spec and status fields that we have place in the __api/v1/hostinfo_types.go__ file.
 
-```text
+```cmd
+make manifests && make generate
+```
+
+Here is the output from the make:
+
+```Makefile
 $ make manifests && make generate
 go: creating new go.mod: module tmp
 go: found sigs.k8s.io/controller-tools/cmd/controller-gen in sigs.k8s.io/controller-tools v0.2.5
@@ -190,9 +217,9 @@ go: found sigs.k8s.io/controller-tools/cmd/controller-gen in sigs.k8s.io/control
 
 ## Step 4 - Install the CRD ##
 
-The CRD is not currently installed. Let's do that next.
+The CRD is not currently installed in the Kubernetes Cluster.
 
-```text
+```shell
 $ kubectl get crd
 NAME                                                               CREATED AT
 antreaagentinfos.clusterinformation.antrea.tanzu.vmware.com        2020-11-18T17:14:03Z
@@ -201,7 +228,15 @@ clusternetworkpolicies.security.antrea.tanzu.vmware.com            2020-11-18T17
 traceflows.ops.antrea.tanzu.vmware.com                             2020-11-18T17:14:03Z
 ```
 
-```text
+To install the CRD, run the following make command:
+
+```cmd
+make install
+```
+
+The output should look something like this:
+
+```makefile
 $ make install
 go: creating new go.mod: module tmp
 go: found sigs.k8s.io/controller-tools/cmd/controller-gen in sigs.k8s.io/controller-tools v0.2.5
@@ -210,7 +245,9 @@ kustomize build config/crd | kubectl apply -f -
 customresourcedefinition.apiextensions.k8s.io/hostinfoes.topology.corinternal.com created
 ```
 
-```text
+Now check to see if the CRD is installed running the same command as before.
+
+```shell
 $ kubectl get crd
 NAME                                                               CREATED AT
 antreaagentinfos.clusterinformation.antrea.tanzu.vmware.com        2020-11-18T17:14:03Z
@@ -220,9 +257,9 @@ hostinfoes.topology.corinternal.com                                2020-12-31T15
 traceflows.ops.antrea.tanzu.vmware.com                             2020-11-18T17:14:03Z
 ```
 
-Another useful way to check is to use the following command against our API group. Remember back in step 2 we specified the domain as __corinternal.com__ and the group as __topology__.
+Our new CRD ```hostinfoes.topology.corinternal.com``` is now visible. Another useful way to check if the CRD has successfully deployed is to use the following command against our API group. Remember back in step 2 we specified the domain as ```corinternal.com``` and the group as ```topology```. Thus the command to query api-resources for this CRD is as follows:
 
-```text
+```shell
 $ kubectl api-resources --api-group=topology.corinternal.com
 NAME         SHORTNAMES   APIGROUP                   NAMESPACED   KIND
 hostinfoes   ch           topology.corinternal.com   true         HostInfo
@@ -230,9 +267,9 @@ hostinfoes   ch           topology.corinternal.com   true         HostInfo
 
 ## Step 5 - Test the CRD ##
 
-At this point, we can do a quick test to see if our CRD is in fact working. To do that, we can create a manifest file and see if we can instantiate such an object (or custom resource) on our Kubernetes cluster. Fortunately kubebuilder provides us with a sample manifest which can be found in __config/samples__.
+At this point, we can do a quick test to see if our CRD is in fact working. To do that, we can create a manifest file with a Custom Resource that uses our CRD, and see if we can instantiate such an object (or custom resource) on our Kubernetes cluster. Fortunately kubebuilder provides us with a sample manifest that we can use for this. It can be found in __config/samples__.
 
-```text
+```shell
 $ cd config/samples
 $ ls
 topology_v1_hostinfo.yaml
@@ -249,7 +286,7 @@ spec:
   foo: bar
 ```
 
-We need to modify this sample manifest so that the specification matches what we added to our CRD. We had a __spec.hostname__ field, as per the __api/v1/hostinfo_types.go__ modification. Thus, after a simple modification, the CR manifest looks like this, where esxi-dell-e.rainpole.com is the name of the ESXi host that I wish to query.
+We need to slightly modify this sample manifest so that the specification field matches what we added to our CRD. Note the spec: above where it states 'Add fields here'. We have removed the __foo__ field and added a __spec.hostname__ field, as per the __api/v1/hostinfo_types.go__ modification earlier. Thus, after a simple modification, the CR manifest looks like this, where __esxi-dell-e.rainpole.com__ is the name of the ESXi host that we wish to query.
 
 ```yaml
 $ cat topology_v1_hostinfo.yaml
@@ -262,18 +299,20 @@ spec:
   hostname: esxi-dell-e.rainpole.com
 ```
 
-To see if it works, we need to create this Custom Resource.
+To see if it works, we need to create this HostInfo Custom Resource.
 
-```text
+```shell
 $ kubectl create -f topology_v1_hostinfo.yaml
 hostinfo.topology.corinternal.com/hostinfo-host-e created
 ```
 
-```text
+```shell
 $ kubectl get hostinfo
 NAME              HOSTNAME
 hostinfo-host-e   esxi-dell-e.rainpole.com
 ```
+
+Note that the hostname field is also printed, as per the kubebuilder directive that we placed in the __api/v1/hostinfo_types.go__. As a final test, we will display the CR in yaml format.
 
 ```yaml
 $ kubectl get hostinfo -o yaml
@@ -309,11 +348,11 @@ metadata:
 
 ## Step 6 - Create the controller / manager ##
 
-This appears to be working as expected. However note that there are no Status fields with our CPU information in the output. We need to implement our controller to do this. The controller implements your desired business login. In the logic of my controller, I first read the vCenter server credentials and access details from a Kubernetes secret (which we will create shortly). I will then open a session to my vCenter server, and get a list of ESXi hosts that it manages. I then look for the ESXi host that is specified in the CR, and retrieve the Total CPU and Free CPU statistics for this host, and update the appropriate Status field with this information.
+This appears to be working as expected. However there are no __Status__ fields displayed with our CPU information in the __yaml__ output above. To see this information, we need to implement our operator / controller logic to do this. The controller implements the desired business logic. In this controller, we first read the vCenter server credentials from a Kubernetes secret (which we will create shortly). We will then open a session to my vCenter server, and get a list of ESXi hosts that it manages. I then look for the ESXi host that is specified in the spec.hostname field in the CR, and retrieve the Total CPU and Free CPU statistics for this host. Finally we will update the appropriate Status field with this information, and we should be able to query it using the __kubectl get hostinfo -o yaml__ command seen previously.
 
-Once all this business logic has been added, I will build a container image which contains my controller. This will then be provisioned as a deployment containing a single Pod with two containers (more on this shortly). The deployment ensures that my Pod is restarted in the event of a failure.
+Once all this business logic has been added in the controller, we will need to be able to run it in the Kubernetes cluster. To achieve this, we will build a container image to run the controller logic. This will be provisioned in the Kubernetes cluster using a Deployment manifest. The deployment contains a single Pod that runs the container (it is called __manager__). The deployment ensures that my Pod is restarted in the event of a failure.
 
-This is what kubebuilder provides as controller scaffolding - we are most interestedin the __HostInfoReconciler__ function:
+This is what kubebuilder provides as controller scaffolding - it is found in __controllers/hostinfo_controller.go__ - we are most interested in the __HostInfoReconciler__ function:
 
 ```go
 func (r *HostInfoReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
@@ -326,11 +365,10 @@ func (r *HostInfoReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 }
 ```
 
-Considering the business logic that I described above, this is what my updated __HostInfoReconciler__ function looks like. Hopefully the comments make is easy to understand, but at the end of the day, when this controller gets a Reconcile request, the TotalCPU and FreeCPU fields in the status of the Custom Resource are update for the specific ESXi host. Note that I have omitted a number of required imports that also need to be added to the controller. Refer to the code for the complete __hostinfo_controller.go__ code.
+Considering the business logic that I described above, this is what my updated __HostInfoReconciler__ function looks like. Hopefully the comments make is easy to understand, but at the end of the day, when this controller gets a reconcile request (something as simple as a get command will trigger this), the TotalCPU and FreeCPU fields in the status of the Custom Resource are updated for the specific ESXi host in the spec.hostname field. Note that I have omitted a number of required imports that also need to be added to the controller. Refer to the code for the complete [__hostinfo_controller.go__](./controllers/hostinfo_controller.go) code. One thing to note is that I am enabling insecure logins by default. This is something that you may wish to change in your code.
 
 ```go
 func (r *HostInfoReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
-
         ctx := context.Background()
         log := r.Log.WithValues("hostinfo", req.NamespacedName)
 
@@ -370,7 +408,9 @@ func (r *HostInfoReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 
         u.User = url.UserPassword(user, pwd)
 
-        // Share govc's session cache (from https://github.com/vmware/govmomi/blob/master/examples/examples.go)
+        // Share govc's session cache 
+        // See https://github.com/vmware/govmomi/blob/master/examples/examples.go
+
         s := &cache.Session{
                 URL:      u,
                 Insecure: true,
@@ -421,7 +461,7 @@ func (r *HostInfoReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
         }
 
         //
-        // Print summary for host in HostInfo specification info
+        // Print summary for host in HostInfo specification info only
         //
 
         for _, hs := range hss {
@@ -440,15 +480,29 @@ func (r *HostInfoReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 }
 ```
 
-We can now proceed to build the controller / manager.
+With the controller logic now in place, we can now proceed to build the controller / manager.
 
 ## Step 7 - Build the controller ##
 
-At this point everything is in place to enable us to deploy the controller to the Kubernete cluster. If you remember back to the prerequisites in step 1, we said that you need access to a container image registry. This is where this comes in. The Dockerfile with the appropriate directives is already in place. MAke sure you login to your image repository, i.e. docker login, before proceeding.
+At this point everything is in place to enable us to deploy the controller to the Kubernete cluster. If you remember back to the prerequisites in step 1, we said that you need access to a container image registry, such as docker.io or quay.io, or VMware's own [Harbor](https://github.com/goharbor/harbor/blob/master/README.md) registry. This is where we need this access to a registry, as we need to push the controller's container image somewhere that can be accessed from your Kubernetes cluster.
 
-To create the container image of our controller / manager, simply run the following commands:
+The __Dockerfile__ with the appropriate directives is already in place to build the container image and include the controller / manager logic. This was once again taken care of by kubebuilder. You must ensure that you login to your image repository, i.e. docker login, before proceeding with the __make__ commands.
 
-```text
+To begin, set an environment variable called __IMG__ to point to your container image repository along with the name and version of the container image, e.g:
+
+```shell
+export IMG=docker.io/cormachogan/hostinfo-controller:v1
+```
+
+Next, to create the container image of the controller / manager, and push it to the image container repository in a single step, run the following __make__ command. You could of course run this as two seperate commands as well, ```make docker-build``` followed by ```make docker-push``` if you so wished.
+
+```cmd
+make docker-build docker-push IMG=docker.io/cormachogan/hostinfo-controller:v1
+```
+
+The output has been shortened in this example:
+
+```Makefile
 $ make docker-build docker-push IMG=docker.io/cormachogan/hostinfo-controller:v1
 go: creating new go.mod: module tmp
 go: found sigs.k8s.io/controller-tools/cmd/controller-gen in sigs.k8s.io/controller-tools v0.2.5
@@ -479,6 +533,7 @@ go: finding github.com/Azure/go-ansiterm v0.0.0-20170929234023-d6e3b3328b78
 go: finding github.com/Azure/go-autorest/autorest v0.9.0
 go: finding github.com/Azure/go-autorest/autorest/adal v0.5.0
 .
+. <-- snip!
 .
 go: finding sigs.k8s.io/controller-runtime v0.5.0
 go: finding sigs.k8s.io/structured-merge-diff v1.0.1-0.20191108220359-b1b620dd3f06
@@ -520,11 +575,11 @@ v1: digest: sha256:f970a9610304c885ffd03edc0c7ddd485fb399279511054a578ade406224a
 $
 ```
 
-The container image of the controller is now built and pushed.
+The container image of the controller is now built and pushed to the container image registry. But we have not yet deployed it. We have to do one or two further modifications before we take that step.
 
 ## Step 8 - Modify the Manager manifest to include environment variables ##
 
-Kubebuilder provides a manager manifest scaffold file. However, since we need to provide vCenter details to our controller, we need to add these to our manager manifest file, which is found in __config/manager/manager.yaml__. This is the deployment manifest for our controller. In the spec, we need to add an additional __spec.env__ section which has the environment variables defined, as well as the name of our secret (which we will create shortly).
+Kubebuilder provides a manager manifest scaffold file for deploying the controller. However, since we need to provide vCenter details to our controller, we need to add these to the controller/manager manifest file. This is found in __config/manager/manager.yaml__. This manifest contains the deployment for the controller. In the spec, we need to add an additional __spec.env__ section which has the environment variables defined, as well as the name of our __secret__ (which we will create shortly). Below is a snippet of that code. Here is the code-complete [config/manager/manager.yaml](./config/manager/manager.yaml)).
 
 ```yaml
     spec:
@@ -553,15 +608,14 @@ Kubebuilder provides a manager manifest scaffold file. However, since we need to
       terminationGracePeriodSeconds: 10
 ```
 
-Note that the secret needs to be deployed in the same namespace that the controller is going to run in,
-__hostinfo-system__. Thus, the secret is created using the following command:
+Note that the __secret__, called __vc-creds__ above, contains the vCenter credentials. This secret needs to be deployed in the same namespace that the controller is going to run in, which is __hostinfo-system__. Thus, the namespace and secret are created using the following command:
 
-```text
+```shell
 $ kubectl create ns hostinfo-system
 namespace/hostinfo-system created
 ```
 
-```text
+```shell
 $ kubectl create secret generic vc-creds \
 --from-literal='GOVMOMI_USERNAME=administrator@vsphere.local' \
 --from-literal='GOVMOMI_PASSWORD=VMware123!' \
@@ -574,7 +628,15 @@ We are now ready to deploy the controller to the Kubernetes cluster.
 
 ## Step 9 - Deploy the controller ##
 
-```text
+To deploy the controller, we run another __make__ command. This will take care of all of the RBAC, cluster roles and role bindings necessary to run the controller, as well as pinging up the correct image, etc.
+
+```Makefile
+$ make deploy IMG=docker.io/cormachogan/hostinfo-controller:v1
+```
+
+The output looks something like this:
+
+```Makefile
 $ make deploy IMG=docker.io/cormachogan/hostinfo-controller:v1
 go: creating new go.mod: module tmp
 go: found sigs.k8s.io/controller-tools/cmd/controller-gen in sigs.k8s.io/controller-tools v0.2.5
@@ -583,25 +645,26 @@ cd config/manager && kustomize edit set image controller=docker.io/cormachogan/h
 kustomize build config/default | kubectl apply -f -
 namespace/hostinfo-system unchanged
 customresourcedefinition.apiextensions.k8s.io/hostinfoes.topology.corinternal.com configured
-role.rbac.authorization.k8s.io/hostinfo-leader-election-role unchanged
-clusterrole.rbac.authorization.k8s.io/hostinfo-manager-role configured
-clusterrole.rbac.authorization.k8s.io/hostinfo-proxy-role unchanged
-clusterrole.rbac.authorization.k8s.io/hostinfo-metrics-reader unchanged
-rolebinding.rbac.authorization.k8s.io/hostinfo-leader-election-rolebinding unchanged
-clusterrolebinding.rbac.authorization.k8s.io/hostinfo-manager-rolebinding unchanged
-clusterrolebinding.rbac.authorization.k8s.io/hostinfo-proxy-rolebinding unchanged
-service/hostinfo-controller-manager-metrics-service unchanged
-deployment.apps/hostinfo-controller-manager configured
-$
+role.rbac.authorization.k8s.io/hostinfo-leader-election-role created
+clusterrole.rbac.authorization.k8s.io/hostinfo-manager-role created
+clusterrole.rbac.authorization.k8s.io/hostinfo-proxy-role created
+clusterrole.rbac.authorization.k8s.io/hostinfo-metrics-reader created
+rolebinding.rbac.authorization.k8s.io/hostinfo-leader-election-rolebinding created
+clusterrolebinding.rbac.authorization.k8s.io/hostinfo-manager-rolebinding created
+clusterrolebinding.rbac.authorization.k8s.io/hostinfo-proxy-rolebinding created
+service/hostinfo-controller-manager-metrics-service created
+deployment.apps/hostinfo-controller-manager created
 ```
 
 ## Step 10 - Check controller functionality ##
 
-Now that our controller has been deployed, let's see if it is working.
+Now that our controller has been deployed, let's see if it is working. There are a few different commands that we can run to verify the operator is working.
 
 ### Step 10.1 - Check the deployment ###
 
-```text
+The deployment should be READY. Remember to specify the namespace correctly when checking it.
+
+```shell
 $ kubectl get deploy -n hostinfo-system
 NAME                          READY   UP-TO-DATE   AVAILABLE   AGE
 hostinfo-controller-manager   1/1     1            1           14m
@@ -609,7 +672,9 @@ hostinfo-controller-manager   1/1     1            1           14m
 
 ### Step 10.2 - Check the Pod ###
 
-```text
+The deployment manages a single controller Pod. There should be 2 containers READY in the controller Pod. One is the __controller / manager__ and the other is the __kube-rbac-proxy__. The [kube-rbac-proxy](https://github.com/brancz/kube-rbac-proxy/blob/master/README.md) is a small HTTP proxy that can perform RBAC authorization against the Kubernetes API. It restricts requests to authorized Pods only.
+
+```shell
 $ kubectl get pods -n hostinfo-system
 NAME                                           READY   STATUS    RESTARTS   AGE
 hostinfo-controller-manager-6484c486ff-8vwsn   2/2     Running   0          72s
@@ -617,7 +682,15 @@ hostinfo-controller-manager-6484c486ff-8vwsn   2/2     Running   0          72s
 
 ### Step 10.3 - Check the controller / manager logs ###
 
-```text
+If we query the __logs__ on the manager container, we should be able to observe successful startup messages as well as successful reconcile requests from the HostInfo CR that we already deployed back in step 5. These reconcile requests should update the __Status__ fields with CPU information as per our controller logic. The command to query the manager container logs in the controller Pod is as follows:
+
+```shell
+$ kubectl logs hostinfo-controller-manager-6484c486ff-8vwsn -n hostinfo-system manager
+```
+
+The output should be somewhat similar to this:
+
+```shell
 $ kubectl logs hostinfo-controller-manager-6484c486ff-8vwsn -n hostinfo-system manager
 2020-12-31T16:54:55.633Z        INFO    controller-runtime.metrics      metrics server is starting to listen    {"addr": "127.0.0.1:8080"}
 2020-12-31T16:54:55.634Z        INFO    setup   starting manager
@@ -635,7 +708,9 @@ I1231 16:55:13.035397       1 leaderelection.go:252] successfully acquired lease
 
 ### Step 10.4 - Check if CPU statistics are returned in the status ###
 
-```text
+Last but not least, let's see if we can see the CPU information in the __status__ fields of the HostInfo object created earlier.
+
+```yaml
 $ kubectl get hostinfo hostinfo-host-e -o yaml
 apiVersion: topology.corinternal.com/v1
 kind: HostInfo
@@ -681,8 +756,18 @@ status:
   totalCPU: 43980
 ```
 
-Success!!! Note that the output above is showing us freeCPU and totalCPU as per our business logic implemented in the controller. How cool is that? You can now go ahead and create additional HostInfo manifests for different hosts in your vSphere environment managed by your vCenter server, and you should be able to get free and total CPU from those as well.
+__Success!!!__ Note that the output above is showing us ```freeCPU``` and ```totalCPU``` as per our business logic implemented in the controller. How cool is that? You can now go ahead and create additional HostInfo manifests for different hosts in your vSphere environment managed by your vCenter server by specifying different hostnames in the manifest spec, and all you to get free and total CPU from those ESXi hosts as well.
 
 ## What next? ##
 
-If this has given you a desire to do more exciting stuff with Kubernetes Operators on top of vSphere, check out the [vmgroup](https://github.com/embano1/codeconnect-vm-operator/blob/main/README.md) operator that my other colleague Micheal Gasch created. It will let you deploy virtual machines on vSphere via a Kubernetes operator. Cool stuff for sure.
+One thing you could do it to extend the HostInfo fields and Operator logic so that it returns even more information about the ESXi host. You could add additional Status fields that returned memory, host type, host tags, etc. There is a lot of information that can be retrieved via the govmomi __HostSystem__ API call.
+
+You can now use __kusomtize__ to package the CRD and controller and distribute it to other Kubernetes clusters. Simply point the __kustomize build__ command at the location of the __kustomize.yaml__ file which is in __config/default__.
+
+```shell
+$ kustomize build config/default/ >> /tmp/hostinfo.yaml
+```
+
+This newly created __hostinfo.yaml__ manifest includes the CRD, RBAC, Service and Deployment for rolling out the operator on other Kubernetes clusters. Nice, eh?
+
+Finally, if this exercise has given you a desire to do more exciting stuff with Kubernetes Operators when Kubernetes is running on vSphere, check out the [vmGroup](https://github.com/embano1/codeconnect-vm-operator/blob/main/README.md) operator that my colleague __Micheal Gasch__ created. It will let you deploy and manage a set of virtual machines on your vSphere infrastructure via a Kubernetes operator. Cool stuff for sure.
