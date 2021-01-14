@@ -44,6 +44,7 @@ You will need the following components pre-installed on your desktop or workstat
 * [Kubebuilder](https://go.kubebuilder.io/quick-start.html)
 * [Kustomize](https://kubernetes-sigs.github.io/kustomize/installation/)
 * Access to a Container Image Repositor (docker.io, quay.io, harbor)
+* A __make__ binary - used by Kubebuilder
 
 If you are interested in learning more about Golang basics, I found [this site](https://tour.golang.org/welcome/1) very helpful.
 
@@ -350,6 +351,8 @@ metadata:
 
 This appears to be working as expected. However there are no __Status__ fields displayed with our CPU information in the __yaml__ output above. To see this information, we need to implement our operator / controller logic to do this. The controller implements the desired business logic. In this controller, we first read the vCenter server credentials from a Kubernetes secret (which we will create shortly). We will then open a session to my vCenter server, and get a list of ESXi hosts that it manages. I then look for the ESXi host that is specified in the spec.hostname field in the CR, and retrieve the Total CPU and Free CPU statistics for this host. Finally we will update the appropriate Status field with this information, and we should be able to query it using the __kubectl get hostinfo -o yaml__ command seen previously.
 
+__Note:__ As has been pointed out, this code is not very optomized, and logging into vCenter Server for every reconcile request is not ideal. The login function should be moved out of the reconcile request, and it is something I will look at going forward. But for our present learning purposes, its fine to do this as we won't be overloading the vCenter Server with our handful of reconcile requests. 
+
 Once all this business logic has been added in the controller, we will need to be able to run it in the Kubernetes cluster. To achieve this, we will build a container image to run the controller logic. This will be provisioned in the Kubernetes cluster using a Deployment manifest. The deployment contains a single Pod that runs the container (it is called __manager__). The deployment ensures that my Pod is restarted in the event of a failure.
 
 This is what kubebuilder provides as controller scaffolding - it is found in __controllers/hostinfo_controller.go__ - we are most interested in the __HostInfoReconciler__ function:
@@ -486,9 +489,22 @@ With the controller logic now in place, we can now proceed to build the controll
 
 At this point everything is in place to enable us to deploy the controller to the Kubernete cluster. If you remember back to the prerequisites in step 1, we said that you need access to a container image registry, such as docker.io or quay.io, or VMware's own [Harbor](https://github.com/goharbor/harbor/blob/master/README.md) registry. This is where we need this access to a registry, as we need to push the controller's container image somewhere that can be accessed from your Kubernetes cluster.
 
-The __Dockerfile__ with the appropriate directives is already in place to build the container image and include the controller / manager logic. This was once again taken care of by kubebuilder. You must ensure that you login to your image repository, i.e. docker login, before proceeding with the __make__ commands.
+The __Dockerfile__ with the appropriate directives is already in place to build the container image and include the controller / manager logic. This was once again taken care of by kubebuilder. You must ensure that you login to your image repository, i.e. docker login, before proceeding with the __make__ commands, e.g.
 
-To begin, set an environment variable called __IMG__ to point to your container image repository along with the name and version of the container image, e.g:
+```shell
+$ docker login
+Login with your Docker ID to push and pull images from Docker Hub. If you dont have a Docker ID, head over to https://hub.docker.com to create one.
+Username: cormachogan
+Password: `***********`
+WARNING! Your password will be stored unencrypted in /home/cormac/.docker/config.json.
+Configure a credential helper to remove this warning. See
+https://docs.docker.com/engine/reference/commandline/login/#credentials-store
+
+Login Succeeded
+$
+```
+
+Next, set an environment variable called __IMG__ to point to your container image repository along with the name and version of the container image, e.g:
 
 ```shell
 export IMG=docker.io/cormachogan/hostinfo-controller:v1
@@ -608,7 +624,7 @@ Kubebuilder provides a manager manifest scaffold file for deploying the controll
       terminationGracePeriodSeconds: 10
 ```
 
-Note that the __secret__, called __vc-creds__ above, contains the vCenter credentials. This secret needs to be deployed in the same namespace that the controller is going to run in, which is __hostinfo-system__. Thus, the namespace and secret are created using the following command:
+Note that the __secret__, called __vc-creds__ above, contains the vCenter credentials. This secret needs to be deployed in the same namespace that the controller is going to run in, which is __hostinfo-system__. Thus, the namespace and secret are created using the following commands, with the environment modified to your own vSphere infrastructure obviously:
 
 ```shell
 $ kubectl create ns hostinfo-system
@@ -660,11 +676,15 @@ deployment.apps/hostinfo-controller-manager created
 
 Now that our controller has been deployed, let's see if it is working. There are a few different commands that we can run to verify the operator is working.
 
-### Step 10.1 - Check the deployment ###
+### Step 10.1 - Check the deployment and replicaset ###
 
 The deployment should be READY. Remember to specify the namespace correctly when checking it.
 
 ```shell
+$ kubectl get rs -n hostinfo-system
+NAME                                     DESIRED   CURRENT   READY   AGE
+hostinfo-controller-manager-66bdb8f5bd   1         1         0       9m48s
+
 $ kubectl get deploy -n hostinfo-system
 NAME                          READY   UP-TO-DATE   AVAILABLE   AGE
 hostinfo-controller-manager   1/1     1            1           14m
