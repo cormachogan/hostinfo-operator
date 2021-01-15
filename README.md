@@ -55,7 +55,7 @@ The CRD is built using [kubebuilder](https://go.kubebuilder.io/).  I'm not going
 The following steps will create the scaffolding to get started.
 
 ```cmd
-$ mkdir hostinfo
+mkdir hostinfo
 $ cd hostinfo
 ```
 
@@ -351,7 +351,7 @@ metadata:
 
 This appears to be working as expected. However there are no __Status__ fields displayed with our CPU information in the __yaml__ output above. To see this information, we need to implement our operator / controller logic to do this. The controller implements the desired business logic. In this controller, we first read the vCenter server credentials from a Kubernetes secret (which we will create shortly). We will then open a session to my vCenter server, and get a list of ESXi hosts that it manages. I then look for the ESXi host that is specified in the spec.hostname field in the CR, and retrieve the Total CPU and Free CPU statistics for this host. Finally we will update the appropriate Status field with this information, and we should be able to query it using the __kubectl get hostinfo -o yaml__ command seen previously.
 
-__Note:__ As has been pointed out, this code is not very optomized, and logging into vCenter Server for every reconcile request is not ideal. The login function should be moved out of the reconcile request, and it is something I will look at going forward. But for our present learning purposes, its fine to do this as we won't be overloading the vCenter Server with our handful of reconcile requests. 
+__Note:__ As has been pointed out, this code is not very optomized, and logging into vCenter Server for every reconcile request is not ideal. The login function should be moved out of the reconcile request, and it is something I will look at going forward. But for our present learning purposes, its fine to do this as we won't be overloading the vCenter Server with our handful of reconcile requests.
 
 Once all this business logic has been added in the controller, we will need to be able to run it in the Kubernetes cluster. To achieve this, we will build a container image to run the controller logic. This will be provisioned in the Kubernetes cluster using a Deployment manifest. The deployment contains a single Pod that runs the container (it is called __manager__). The deployment ensures that my Pod is restarted in the event of a failure.
 
@@ -647,7 +647,7 @@ We are now ready to deploy the controller to the Kubernetes cluster.
 To deploy the controller, we run another __make__ command. This will take care of all of the RBAC, cluster roles and role bindings necessary to run the controller, as well as pinging up the correct image, etc.
 
 ```Makefile
-$ make deploy IMG=docker.io/cormachogan/hostinfo-controller:v1
+make deploy IMG=docker.io/cormachogan/hostinfo-controller:v1
 ```
 
 The output looks something like this:
@@ -690,7 +690,7 @@ NAME                          READY   UP-TO-DATE   AVAILABLE   AGE
 hostinfo-controller-manager   1/1     1            1           14m
 ```
 
-### Step 10.2 - Check the Pod ###
+### Step 10.2 - Check the Pods ###
 
 The deployment manages a single controller Pod. There should be 2 containers READY in the controller Pod. One is the __controller / manager__ and the other is the __kube-rbac-proxy__. The [kube-rbac-proxy](https://github.com/brancz/kube-rbac-proxy/blob/master/README.md) is a small HTTP proxy that can perform RBAC authorization against the Kubernetes API. It restricts requests to authorized Pods only.
 
@@ -700,12 +700,18 @@ NAME                                           READY   STATUS    RESTARTS   AGE
 hostinfo-controller-manager-6484c486ff-8vwsn   2/2     Running   0          72s
 ```
 
+If you experience issues with the one of the pods not coming online, use the following command to display the Pod status and examine the events.
+
+```shell
+$ kubectl describe pod hostinfo-controller-manager-6484c486ff-8vwsn -n hostinfo-system
+```
+
 ### Step 10.3 - Check the controller / manager logs ###
 
 If we query the __logs__ on the manager container, we should be able to observe successful startup messages as well as successful reconcile requests from the HostInfo CR that we already deployed back in step 5. These reconcile requests should update the __Status__ fields with CPU information as per our controller logic. The command to query the manager container logs in the controller Pod is as follows:
 
 ```shell
-$ kubectl logs hostinfo-controller-manager-6484c486ff-8vwsn -n hostinfo-system manager
+kubectl logs hostinfo-controller-manager-6484c486ff-8vwsn -n hostinfo-system manager
 ```
 
 The output should be somewhat similar to this:
@@ -785,7 +791,7 @@ One thing you could do it to extend the HostInfo fields and Operator logic so th
 You can now use __kusomtize__ to package the CRD and controller and distribute it to other Kubernetes clusters. Simply point the __kustomize build__ command at the location of the __kustomize.yaml__ file which is in __config/default__.
 
 ```shell
-$ kustomize build config/default/ >> /tmp/hostinfo.yaml
+kustomize build config/default/ >> /tmp/hostinfo.yaml
 ```
 
 This newly created __hostinfo.yaml__ manifest includes the CRD, RBAC, Service and Deployment for rolling out the operator on other Kubernetes clusters. Nice, eh?
