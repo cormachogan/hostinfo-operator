@@ -784,6 +784,62 @@ status:
 
 __Success!!!__ Note that the output above is showing us ```freeCPU``` and ```totalCPU``` as per our business logic implemented in the controller. How cool is that? You can now go ahead and create additional HostInfo manifests for different hosts in your vSphere environment managed by your vCenter server by specifying different hostnames in the manifest spec, and all you to get free and total CPU from those ESXi hosts as well.
 
+## Cleanup ##
+
+To remove the __hostinfo__ CR, operator and CRD, run the following commands.
+
+### Remove the HostInfo CR ###
+
+```shell
+$ kubectl delete hostinfo hostinfo-host-e
+hostinfo.topology.corinternal.com "hostinfo-host-e" deleted
+```
+
+### Removed the Operator/Controller deployment ###
+
+Deleting the deployment will removed the ReplicaSet and Pods associated with the controller.
+
+```shell
+$ kubectl get deploy -n hostinfo-system
+NAME                          READY   UP-TO-DATE   AVAILABLE   AGE
+hostinfo-controller-manager   1/1     1            1           2d8h
+
+$ kubectl delete deploy hostinfo-controller-manager -n hostinfo-system
+deployment.apps "hostinfo-controller-manager" deleted
+```
+
+### Remove the CRD ###
+
+```shell
+$ kubectl get crds
+NAME                                                               CREATED AT
+antreaagentinfos.clusterinformation.antrea.tanzu.vmware.com        2021-01-14T16:31:58Z
+antreacontrollerinfos.clusterinformation.antrea.tanzu.vmware.com   2021-01-14T16:31:58Z
+clusternetworkpolicies.security.antrea.tanzu.vmware.com            2021-01-14T16:31:59Z
+hostinfoes.topology.corinternal.com                                2021-01-14T16:52:11Z
+traceflows.ops.antrea.tanzu.vmware.com                             2021-01-14T16:31:59Z
+```
+
+```Makefile
+$ make uninstall
+go: creating new go.mod: module tmp
+go: found sigs.k8s.io/controller-tools/cmd/controller-gen in sigs.k8s.io/controller-tools v0.2.5
+/home/cormac/go/bin/controller-gen "crd:preserveUnknownFields=false,crdVersions=v1,trivialVersions=true" rbac:roleName=manager-role webhook paths="./..." output:crd:artifacts:config=config/crd/bases
+kustomize build config/crd | kubectl delete -f -
+customresourcedefinition.apiextensions.k8s.io "hostinfoes.topology.corinternal.com" deleted
+```
+
+```shell
+$ kubectl get crds
+NAME                                                               CREATED AT
+antreaagentinfos.clusterinformation.antrea.tanzu.vmware.com        2021-01-14T16:31:58Z
+antreacontrollerinfos.clusterinformation.antrea.tanzu.vmware.com   2021-01-14T16:31:58Z
+clusternetworkpolicies.security.antrea.tanzu.vmware.com            2021-01-14T16:31:59Z
+traceflows.ops.antrea.tanzu.vmware.com                             2021-01-14T16:31:59Z
+```
+
+The CRD is now removed. At this point, you can also delete the namespace created for the exercise, in this case __hostinfo-system__. Removing this namespace will also remove the __vc_creds__ secret created earlier.
+
 ## What next? ##
 
 One thing you could do it to extend the HostInfo fields and Operator logic so that it returns even more information about the ESXi host. You could add additional Status fields that returned memory, host type, host tags, etc. There is a lot of information that can be retrieved via the govmomi __HostSystem__ API call.
