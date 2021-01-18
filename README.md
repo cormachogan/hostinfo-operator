@@ -639,7 +639,7 @@ $ kubectl create secret generic vc-creds \
 --from-literal='GOVMOMI_PASSWORD=VMware123!' \
 --from-literal='GOVMOMI_URL=192.168.0.100' \
 -n hostinfo-system
-namespace/hostinfo-system created
+secret/vc-creds created
 ```
 
 We are now ready to deploy the controller to the Kubernetes cluster.
@@ -705,7 +705,7 @@ hostinfo-controller-manager-6484c486ff-8vwsn   2/2     Running   0          72s
 If you experience issues with the one of the pods not coming online, use the following command to display the Pod status and examine the events.
 
 ```shell
-$ kubectl describe pod hostinfo-controller-manager-6484c486ff-8vwsn -n hostinfo-system
+kubectl describe pod hostinfo-controller-manager-6484c486ff-8vwsn -n hostinfo-system
 ```
 
 ### Step 10.3 - Check the controller / manager logs ###
