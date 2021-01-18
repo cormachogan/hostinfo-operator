@@ -22,6 +22,8 @@ The following will be created as part of this tutorial:
 
 * An __Operator__ (or business logic) to retrieve the Total and Free CPU from the ESXi host specified in the CR will be coded in the controller for this CR.
 
+__Note:__ A similar exercise to create an operator to query virtual machine information. This can be found [here](https://github.com/cormachogan/vminfo-operator).
+
 ## What is not covered in this tutorial? ##
 
 The assumption is that you already have a working Kubernetes cluster. Installation and deployment of a Kubernetes is outside the scope of this tutorial. If you do not have a Kubernetes cluster available, consider using __Kubernetes in Docker__ (shortened to __Kind__) which uses containers as Kubernetes nodes. A quickstart guide can be found here:
