@@ -32,7 +32,7 @@ type HostInfoStatus struct {
 }
 
 // +kubebuilder:validation:Optional
-// +kubebuilder:resource:shortName={"ch"}
+// +kubebuilder:resource:shortName={"hi"}
 // +kubebuilder:printcolumn:name="Hostname",type=string,JSONPath=`.spec.hostname`
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status

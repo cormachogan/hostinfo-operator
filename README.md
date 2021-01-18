@@ -163,7 +163,7 @@ type HostInfoStatus struct {
 // +kubebuilder:object:root=true
 ```
 
-This file is modified to include a single __spec.hostname__ field and to return two __status__ fields. There are also a number of kubebuilder fields added, which are used to do validation and other kubebuilder related functions. The shortname "ch" will be used later on in our controller logic. Also, when we query any Custom Resources created with the CRD, e.g. ```kubectl get hostinfo```, we want the output to display the hostname of the ESXi host.
+This file is modified to include a single __spec.hostname__ field and to return two __status__ fields. There are also a number of kubebuilder fields added, which are used to do validation and other kubebuilder related functions. The shortname "__hi__" will be used later on in our controller logic. This can also be used with kubectl, e.g kubectl get hi rather kubectl get hostinfo. Also, when we query any Custom Resources created with the CRD, e.g. ```kubectl get hostinfo```, we want the output to display the hostname of the ESXi host.
 
 Note that what we are doing here is for education purposes only. Typically what you would observe is that the spec and status fields would be similar, and it is the function of the controller to reconcile and differences between the two to achieve eventual consistency. But we are keeping things simple, as the purpose here is to show how vSphere can be queried from a Kubernetes Operator. Below is a snippet of the __hostinfo_types.go__ showing the code changes. The code-complete [hostinfo_types.go](api/v1/hostinfo_types.go) is here.
 
@@ -180,7 +180,7 @@ type HostInfoStatus struct {
 }
 
 // +kubebuilder:validation:Optional
-// +kubebuilder:resource:shortName={"ch"}
+// +kubebuilder:resource:shortName={"hi"}
 // +kubebuilder:printcolumn:name="Hostname",type=string,JSONPath=`.spec.hostname`
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
@@ -265,7 +265,7 @@ Our new CRD ```hostinfoes.topology.corinternal.com``` is now visible. Another us
 ```shell
 $ kubectl api-resources --api-group=topology.corinternal.com
 NAME         SHORTNAMES   APIGROUP                   NAMESPACED   KIND
-hostinfoes   ch           topology.corinternal.com   true         HostInfo
+hostinfoes   hi           topology.corinternal.com   true         HostInfo
 ```
 
 ## Step 5 - Test the CRD ##
@@ -353,7 +353,75 @@ metadata:
 
 This appears to be working as expected. However there are no __Status__ fields displayed with our CPU information in the __yaml__ output above. To see this information, we need to implement our operator / controller logic to do this. The controller implements the desired business logic. In this controller, we first read the vCenter server credentials from a Kubernetes secret (which we will create shortly). We will then open a session to my vCenter server, and get a list of ESXi hosts that it manages. I then look for the ESXi host that is specified in the spec.hostname field in the CR, and retrieve the Total CPU and Free CPU statistics for this host. Finally we will update the appropriate Status field with this information, and we should be able to query it using the __kubectl get hostinfo -o yaml__ command seen previously.
 
-__Note:__ As has been pointed out, this code is not very optomized, and logging into vCenter Server for every reconcile request is not ideal. The login function should be moved out of the reconcile request, and it is something I will look at going forward. But for our present learning purposes, its fine to do this as we won't be overloading the vCenter Server with our handful of reconcile requests.
+__Note:__ The initial version of the code was not very optomized as it logged into vCenter Server for every reconcile request, which is not ideal. The login function has sinced been moved out of the reconciler in the controller, and into __main.go__. Here is the main.go with the my vlogin function added.
+
+```go
+func vlogin(ctx context.Context, vc, user, pwd string) (*vim25.Client, error) {
+
+        //
+        // Create a vSphere/vCenter client
+        //
+        //    The govmomi client requires a URL object, u.
+        //    It is not just a string representation of the vCenter URL.
+        //
+
+        u, err := soap.ParseURL(vc)
+
+        if u == nil {
+                fmt.Println("could not parse URL (environment variables set?)")
+        }
+
+        if err != nil {
+                setupLog.Error(err, "URL parsing not successful", "controller", "HostInfo")
+                os.Exit(1)
+        }
+
+        u.User = url.UserPassword(user, pwd)
+
+        //
+        // Ripped from https://github.com/vmware/govmomi/blob/master/examples/examples.go
+        //
+
+        // Share govc's session cache
+        s := &cache.Session{
+                URL:      u,
+                Insecure: true,
+        }
+
+        c := new(vim25.Client)
+
+        err = s.Login(ctx, c, nil)
+
+        if err != nil {
+                setupLog.Error(err, " login not successful", "controller", "HostInfo")
+                os.Exit(1)
+        }
+
+        return c, nil
+```
+
+And within the main function, here is my call to the vlogin function, as well as the updated HostInfoReconciler call with a new field (VC) for the vSphere login added to the request. This login info can now be used from withing the HostInfoReconciler function, as we will see shortly.
+
+```go
+        vc := os.Getenv("GOVMOMI_URL")
+        user := os.Getenv("GOVMOMI_USERNAME")
+        pwd := os.Getenv("GOVMOMI_PASSWORD")
+
+        ctx, cancel := context.WithCancel(context.Background())
+        defer cancel()
+
+        c, err := vlogin(ctx, vc, user, pwd)
+
+        if err = (&controllers.HostInfoReconciler{
+                Client: mgr.GetClient(),
+                VC:     c,
+                Log:    ctrl.Log.WithName("controllers").WithName("HostInfo"),
+                Scheme: mgr.GetScheme(),
+        }).SetupWithManager(mgr); err != nil {
+                setupLog.Error(err, "unable to create controller", "controller", "HostInfo")
+                os.Exit(1)
+        }
+```
 
 Once all this business logic has been added in the controller, we will need to be able to run it in the Kubernetes cluster. To achieve this, we will build a container image to run the controller logic. This will be provisioned in the Kubernetes cluster using a Deployment manifest. The deployment contains a single Pod that runs the container (it is called __manager__). The deployment ensures that my Pod is restarted in the event of a failure.
 
@@ -377,8 +445,8 @@ func (r *HostInfoReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
         ctx := context.Background()
         log := r.Log.WithValues("hostinfo", req.NamespacedName)
 
-        ch := &topologyv1.HostInfo{}
-        if err := r.Client.Get(ctx, req.NamespacedName, ch); err != nil {
+        hi := &topologyv1.HostInfo{}
+        if err := r.Client.Get(ctx, req.NamespacedName, hi); err != nil {
                 // add some debug information if it's not a NotFound error
                 if !k8serr.IsNotFound(err) {
                         log.Error(err, "unable to fetch HostInfo")
@@ -386,62 +454,20 @@ func (r *HostInfoReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
                 return ctrl.Result{}, client.IgnoreNotFound(err)
         }
 
-        msg := fmt.Sprintf("received reconcile request for %q (namespace: %q)", ch.GetName(), ch.GetNamespace())
+        msg := fmt.Sprintf("received reconcile request for %q (namespace: %q)", hi.GetName(), hi.GetNamespace())
         log.Info(msg)
 
-        // We will retrieve these environment variables through 
-        // passing 'secret' parameters via the manager manifest
-
-        vc := os.Getenv("GOVMOMI_URL")
-        user := os.Getenv("GOVMOMI_USERNAME")
-        pwd := os.Getenv("GOVMOMI_PASSWORD")
-
         //
-        // Create a vSphere/vCenter client
-        //
-        //    The govmomi client requires a URL object, u, 
-        //    not just a string representation of the vCenter URL
+        // Create a view manager, using vCenter session detail passed to Reconciler
         //
 
-        u, err := soap.ParseURL(vc)
-
-        if err != nil {
-                msg := fmt.Sprintf("unable to parse vCenter URL: error %s", err)
-                log.Info(msg)
-                return ctrl.Result{}, err
-        }
-
-        u.User = url.UserPassword(user, pwd)
-
-        // Share govc's session cache 
-        // See https://github.com/vmware/govmomi/blob/master/examples/examples.go
-
-        s := &cache.Session{
-                URL:      u,
-                Insecure: true,
-        }
-
-        c := new(vim25.Client)
-
-        err = s.Login(ctx, c, nil)
-
-        if err != nil {
-                msg := fmt.Sprintf("unable to login to vCenter: error %s", err)
-                log.Info(msg)
-                return ctrl.Result{}, err
-        }
-
-        //
-        // Create a view manager
-        //
-
-        m := view.NewManager(c)
+        m := view.NewManager(r.VC)
 
         //
         // Create a container view of HostSystem objects
         //
 
-        v, err := m.CreateContainerView(ctx, c.ServiceContent.RootFolder, []string{"HostSystem"}, true)
+        v, err := m.CreateContainerView(ctx, r.VC.ServiceContent.RootFolder, []string{"HostSystem"}, true)
 
         if err != nil {
                 msg := fmt.Sprintf("unable to create container view for HostSystem: error %s", err)
@@ -470,13 +496,13 @@ func (r *HostInfoReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
         //
 
         for _, hs := range hss {
-                if hs.Summary.Config.Name == ch.Spec.Hostname {
-                        ch.Status.TotalCPU = int64(hs.Summary.Hardware.CpuMhz) * int64(hs.Summary.Hardware.NumCpuCores)
-                        ch.Status.FreeCPU = (int64(hs.Summary.Hardware.CpuMhz) * int64(hs.Summary.Hardware.NumCpuCores)) - int64(hs.Summary.QuickStats.OverallCpuUsage)
+                if hs.Summary.Config.Name == hi.Spec.Hostname {
+                        hi.Status.TotalCPU = int64(hs.Summary.Hardware.CpuMhz) * int64(hs.Summary.Hardware.NumCpuCores)
+                        hi.Status.FreeCPU = (int64(hs.Summary.Hardware.CpuMhz) * int64(hs.Summary.Hardware.NumCpuCores)) - int64(hs.Summary.QuickStats.OverallCpuUsage)
                 }
         }
 
-        if err := r.Status().Update(ctx, ch); err != nil {
+        if err := r.Status().Update(ctx, hi); err != nil {
                 log.Error(err, "unable to update HostInfo status")
                 return ctrl.Result{}, err
         }

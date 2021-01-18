@@ -17,6 +17,13 @@ limitations under the License.
 package main
 
 import (
+	"context"
+	"fmt"
+	"github.com/vmware/govmomi/session/cache"
+	"github.com/vmware/govmomi/vim25"
+	"github.com/vmware/govmomi/vim25/soap"
+	"net/url"
+
 	"flag"
 	"os"
 
@@ -43,6 +50,49 @@ func init() {
 	// +kubebuilder:scaffold:scheme
 }
 
+func vlogin(ctx context.Context, vc, user, pwd string) (*vim25.Client, error) {
+
+	//
+	// Create a vSphere/vCenter client
+	//
+	//    The govmomi client requires a URL object, u, not just a string representation of the vCenter URL.
+	//
+
+	u, err := soap.ParseURL(vc)
+
+	if u == nil {
+		fmt.Println("could not parse URL (environment variables set?)")
+	}
+
+	if err != nil {
+		setupLog.Error(err, "URL parsing not successful", "controller", "HostInfo")
+		os.Exit(1)
+	}
+
+	u.User = url.UserPassword(user, pwd)
+
+	//
+	// Ripped from https://github.com/vmware/govmomi/blob/master/examples/examples.go
+	//
+
+	// Share govc's session cache
+	s := &cache.Session{
+		URL:      u,
+		Insecure: true,
+	}
+
+	c := new(vim25.Client)
+
+	err = s.Login(ctx, c, nil)
+
+	if err != nil {
+		setupLog.Error(err, " login not successful", "controller", "HostInfo")
+		os.Exit(1)
+	}
+
+	return c, nil
+}
+
 func main() {
 	var metricsAddr string
 	var enableLeaderElection bool
@@ -66,8 +116,18 @@ func main() {
 		os.Exit(1)
 	}
 
+	vc := os.Getenv("GOVMOMI_URL")
+	user := os.Getenv("GOVMOMI_USERNAME")
+	pwd := os.Getenv("GOVMOMI_PASSWORD")
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	c, err := vlogin(ctx, vc, user, pwd)
+
 	if err = (&controllers.HostInfoReconciler{
 		Client: mgr.GetClient(),
+		VC:     c,
 		Log:    ctrl.Log.WithName("controllers").WithName("HostInfo"),
 		Scheme: mgr.GetScheme(),
 	}).SetupWithManager(mgr); err != nil {

@@ -20,15 +20,11 @@ import (
 	"context"
 	"fmt"
 	"github.com/go-logr/logr"
-	"github.com/vmware/govmomi/session/cache"
 	"github.com/vmware/govmomi/view"
 	"github.com/vmware/govmomi/vim25"
 	"github.com/vmware/govmomi/vim25/mo"
-	"github.com/vmware/govmomi/vim25/soap"
 	k8serr "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
-	"net/url"
-	"os"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -38,6 +34,7 @@ import (
 // HostInfoReconciler reconciles a HostInfo object
 type HostInfoReconciler struct {
 	client.Client
+	VC     *vim25.Client
 	Log    logr.Logger
 	Scheme *runtime.Scheme
 }
@@ -50,8 +47,8 @@ func (r *HostInfoReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 	ctx := context.Background()
 	log := r.Log.WithValues("hostinfo", req.NamespacedName)
 
-	ch := &topologyv1.HostInfo{}
-	if err := r.Client.Get(ctx, req.NamespacedName, ch); err != nil {
+	hi := &topologyv1.HostInfo{}
+	if err := r.Client.Get(ctx, req.NamespacedName, hi); err != nil {
 		// add some debug information if it's not a NotFound error
 		if !k8serr.IsNotFound(err) {
 			log.Error(err, "unable to fetch HostInfo")
@@ -59,61 +56,20 @@ func (r *HostInfoReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 
-	msg := fmt.Sprintf("received reconcile request for %q (namespace: %q)", ch.GetName(), ch.GetNamespace())
+	msg := fmt.Sprintf("received reconcile request for %q (namespace: %q)", hi.GetName(), hi.GetNamespace())
 	log.Info(msg)
-
-	// We will retrieve these environment variables through passing 'secret' parameters via the manager manifest
-
-	vc := os.Getenv("GOVMOMI_URL")
-	user := os.Getenv("GOVMOMI_USERNAME")
-	pwd := os.Getenv("GOVMOMI_PASSWORD")
-
-	//
-	// Create a vSphere/vCenter client
-	//
-	//    The govmomi client requires a URL object, u, not just a string representation of the vCenter URL.
-
-	u, err := soap.ParseURL(vc)
-
-	if err != nil {
-		msg := fmt.Sprintf("unable to parse vCenter URL: error %s", err)
-		log.Info(msg)
-		return ctrl.Result{}, err
-	}
-
-	u.User = url.UserPassword(user, pwd)
-
-	//
-	// Ripped from https://github.com/vmware/govmomi/blob/master/examples/examples.go
-	//
-
-	// Share govc's session cache
-	s := &cache.Session{
-		URL:      u,
-		Insecure: true,
-	}
-
-	c := new(vim25.Client)
-
-	err = s.Login(ctx, c, nil)
-
-	if err != nil {
-		msg := fmt.Sprintf("unable to login to vCenter: error %s", err)
-		log.Info(msg)
-		return ctrl.Result{}, err
-	}
 
 	//
 	// Create a view manager
 	//
 
-	m := view.NewManager(c)
+	m := view.NewManager(r.VC)
 
 	//
 	// Create a container view of HostSystem objects
 	//
 
-	v, err := m.CreateContainerView(ctx, c.ServiceContent.RootFolder, []string{"HostSystem"}, true)
+	v, err := m.CreateContainerView(ctx, r.VC.ServiceContent.RootFolder, []string{"HostSystem"}, true)
 
 	if err != nil {
 		msg := fmt.Sprintf("unable to create container view for HostSystem: error %s", err)
@@ -143,13 +99,13 @@ func (r *HostInfoReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 	//
 
 	for _, hs := range hss {
-		if hs.Summary.Config.Name == ch.Spec.Hostname {
-			ch.Status.TotalCPU = int64(hs.Summary.Hardware.CpuMhz) * int64(hs.Summary.Hardware.NumCpuCores)
-			ch.Status.FreeCPU = (int64(hs.Summary.Hardware.CpuMhz) * int64(hs.Summary.Hardware.NumCpuCores)) - int64(hs.Summary.QuickStats.OverallCpuUsage)
+		if hs.Summary.Config.Name == hi.Spec.Hostname {
+			hi.Status.TotalCPU = int64(hs.Summary.Hardware.CpuMhz) * int64(hs.Summary.Hardware.NumCpuCores)
+			hi.Status.FreeCPU = (int64(hs.Summary.Hardware.CpuMhz) * int64(hs.Summary.Hardware.NumCpuCores)) - int64(hs.Summary.QuickStats.OverallCpuUsage)
 		}
 	}
 
-	if err := r.Status().Update(ctx, ch); err != nil {
+	if err := r.Status().Update(ctx, hi); err != nil {
 		log.Error(err, "unable to update HostInfo status")
 		return ctrl.Result{}, err
 	}
