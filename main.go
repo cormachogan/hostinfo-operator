@@ -19,10 +19,11 @@ package main
 import (
 	"context"
 	"fmt"
+	"net/url"
+
 	"github.com/vmware/govmomi/session/cache"
 	"github.com/vmware/govmomi/vim25"
 	"github.com/vmware/govmomi/vim25/soap"
-	"net/url"
 
 	"flag"
 	"os"
@@ -116,6 +117,10 @@ func main() {
 		os.Exit(1)
 	}
 
+	//
+	// Retrieve vSphere login detail from environemnt variables
+	//
+
 	vc := os.Getenv("GOVMOMI_URL")
 	user := os.Getenv("GOVMOMI_USERNAME")
 	pwd := os.Getenv("GOVMOMI_PASSWORD")
@@ -123,6 +128,9 @@ func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
+	//
+	// Get vSphere login session, and send to Reconciler
+	//
 	c, err := vlogin(ctx, vc, user, pwd)
 
 	if err = (&controllers.HostInfoReconciler{

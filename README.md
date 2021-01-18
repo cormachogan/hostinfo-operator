@@ -315,6 +315,14 @@ NAME              HOSTNAME
 hostinfo-host-e   esxi-dell-e.rainpole.com
 ```
 
+Or use the shortcut, "hi":
+
+```shell
+$ kubectl get hi
+NAME              HOSTNAME
+hostinfo-host-e   esxi-dell-e.rainpole.com
+```
+
 Note that the hostname field is also printed, as per the kubebuilder directive that we placed in the __api/v1/hostinfo_types.go__. As a final test, we will display the CR in yaml format.
 
 ```yaml
@@ -353,7 +361,7 @@ metadata:
 
 This appears to be working as expected. However there are no __Status__ fields displayed with our CPU information in the __yaml__ output above. To see this information, we need to implement our operator / controller logic to do this. The controller implements the desired business logic. In this controller, we first read the vCenter server credentials from a Kubernetes secret (which we will create shortly). We will then open a session to my vCenter server, and get a list of ESXi hosts that it manages. I then look for the ESXi host that is specified in the spec.hostname field in the CR, and retrieve the Total CPU and Free CPU statistics for this host. Finally we will update the appropriate Status field with this information, and we should be able to query it using the __kubectl get hostinfo -o yaml__ command seen previously.
 
-__Note:__ The initial version of the code was not very optomized as it logged into vCenter Server for every reconcile request, which is not ideal. The login function has sinced been moved out of the reconciler in the controller, and into __main.go__. Here is the main.go with the my vlogin function added.
+__Note:__ The initial version of the code was not very optomized as the code for creating the vCenter session was in the reconciler and was triggered on every reconcile request, which is not ideal. The login function has now been moved out of the reconciler function in the controller, and into __main.go__. Here is the main.go with a new __vlogin__ function for creating the vSphere session.
 
 ```go
 func vlogin(ctx context.Context, vc, user, pwd string) (*vim25.Client, error) {
@@ -378,10 +386,6 @@ func vlogin(ctx context.Context, vc, user, pwd string) (*vim25.Client, error) {
 
         u.User = url.UserPassword(user, pwd)
 
-        //
-        // Ripped from https://github.com/vmware/govmomi/blob/master/examples/examples.go
-        //
-
         // Share govc's session cache
         s := &cache.Session{
                 URL:      u,
@@ -400,7 +404,7 @@ func vlogin(ctx context.Context, vc, user, pwd string) (*vim25.Client, error) {
         return c, nil
 ```
 
-And within the main function, here is my call to the vlogin function, as well as the updated HostInfoReconciler call with a new field (VC) for the vSphere login added to the request. This login info can now be used from withing the HostInfoReconciler function, as we will see shortly.
+And within the main function, here is the call to the __vlogin__ function, as well as the updated __HostInfoReconciler__ call with a new field (VC) which has the vSphere session details. This login info can now be used from withing the HostInfoReconciler function, as we will see shortly.
 
 ```go
         vc := os.Getenv("GOVMOMI_URL")
@@ -422,10 +426,11 @@ And within the main function, here is my call to the vlogin function, as well as
                 os.Exit(1)
         }
 ```
+Here is the complete code for [__main.go__](./main.go).
 
-Once all this business logic has been added in the controller, we will need to be able to run it in the Kubernetes cluster. To achieve this, we will build a container image to run the controller logic. This will be provisioned in the Kubernetes cluster using a Deployment manifest. The deployment contains a single Pod that runs the container (it is called __manager__). The deployment ensures that my Pod is restarted in the event of a failure.
+Once the business logic is added in the controller, we will need to be able to run it in the Kubernetes cluster. To achieve this, we will build a container image to run the controller logic. This will be provisioned in the Kubernetes cluster using a Deployment manifest. The deployment contains a single Pod that runs the container (it is called __manager__). The deployment ensures that the controller manager Pod is restarted in the event of a failure.
 
-This is what kubebuilder provides as controller scaffolding - it is found in __controllers/hostinfo_controller.go__ - we are most interested in the __HostInfoReconciler__ function:
+This is what kubebuilder provides as controller scaffolding - it is found in __controllers/hostinfo_controller.go__. We are most interested in the __HostInfoReconciler__ function:
 
 ```go
 func (r *HostInfoReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
