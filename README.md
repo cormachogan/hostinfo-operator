@@ -426,6 +426,7 @@ And within the main function, here is the call to the __vlogin__ function, as we
                 os.Exit(1)
         }
 ```
+
 Here is the complete code for [__main.go__](./main.go).
 
 Once the business logic is added in the controller, we will need to be able to run it in the Kubernetes cluster. To achieve this, we will build a container image to run the controller logic. This will be provisioned in the Kubernetes cluster using a Deployment manifest. The deployment contains a single Pod that runs the container (it is called __manager__). The deployment ensures that the controller manager Pod is restarted in the event of a failure.
