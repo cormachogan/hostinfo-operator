@@ -803,12 +803,16 @@ Deleting the deployment will removed the ReplicaSet and Pods associated with the
 $ kubectl get deploy -n hostinfo-system
 NAME                          READY   UP-TO-DATE   AVAILABLE   AGE
 hostinfo-controller-manager   1/1     1            1           2d8h
+```
 
+```shell
 $ kubectl delete deploy hostinfo-controller-manager -n hostinfo-system
 deployment.apps "hostinfo-controller-manager" deleted
 ```
 
 ### Remove the CRD ###
+
+Next, remove the Custom Resource Definition, __hostinfoes.topology.corinternal.com__.
 
 ```shell
 $ kubectl get crds
