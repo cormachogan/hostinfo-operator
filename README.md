@@ -449,7 +449,7 @@ func (r *HostInfoReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 }
 ```
 
-Considering the business logic that I described above, this is what my updated __HostInfoReconciler__ function looks like. Hopefully the comments make is easy to understand, but at the end of the day, when this controller gets a reconcile request (something as simple as a get command will trigger this), the TotalCPU and FreeCPU fields in the status of the Custom Resource are updated for the specific ESXi host in the spec.hostname field. Note that I have omitted a number of required imports that also need to be added to the controller. Refer to the code for the complete [__hostinfo_controller.go__](./controllers/hostinfo_controller.go) code. 
+Considering the business logic that I described above, this is what my updated __HostInfoReconciler__ function looks like. Hopefully the comments make is easy to understand, but at the end of the day, when this controller gets a reconcile request (something as simple as a get command will trigger this), the TotalCPU and FreeCPU fields in the status of the Custom Resource are updated for the specific ESXi host in the spec.hostname field. Note that I have omitted a number of required imports that also need to be added to the controller. Refer to the code for the complete [__hostinfo_controller.go__](./controllers/hostinfo_controller.go) code.
 
 ```go
 func (r *HostInfoReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
