@@ -513,6 +513,10 @@ func (r *HostInfoReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
                 }
         }
 
+        //
+        // Update the HostInfo status fields
+        //
+
         if err := r.Status().Update(ctx, hi); err != nil {
                 log.Error(err, "unable to update HostInfo status")
                 return ctrl.Result{}, err

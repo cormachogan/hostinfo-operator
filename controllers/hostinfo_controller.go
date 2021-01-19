@@ -19,6 +19,7 @@ package controllers
 import (
 	"context"
 	"fmt"
+
 	"github.com/go-logr/logr"
 	"github.com/vmware/govmomi/view"
 	"github.com/vmware/govmomi/vim25"
@@ -104,6 +105,10 @@ func (r *HostInfoReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 			hi.Status.FreeCPU = (int64(hs.Summary.Hardware.CpuMhz) * int64(hs.Summary.Hardware.NumCpuCores)) - int64(hs.Summary.QuickStats.OverallCpuUsage)
 		}
 	}
+
+	//
+	// Update the HostInfo status fields
+	//
 
 	if err := r.Status().Update(ctx, hi); err != nil {
 		log.Error(err, "unable to update HostInfo status")
