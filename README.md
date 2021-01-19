@@ -361,7 +361,9 @@ metadata:
 
 This appears to be working as expected. However there are no __Status__ fields displayed with our CPU information in the __yaml__ output above. To see this information, we need to implement our operator / controller logic to do this. The controller implements the desired business logic. In this controller, we first read the vCenter server credentials from a Kubernetes secret (which we will create shortly). We will then open a session to my vCenter server, and get a list of ESXi hosts that it manages. I then look for the ESXi host that is specified in the spec.hostname field in the CR, and retrieve the Total CPU and Free CPU statistics for this host. Finally we will update the appropriate Status field with this information, and we should be able to query it using the __kubectl get hostinfo -o yaml__ command seen previously.
 
-__Note:__ The initial version of the code was not very optomized as the code for creating the vCenter session was in the reconciler and was triggered on every reconcile request, which is not ideal. The login function has now been moved out of the reconciler function in the controller, and into __main.go__. Here is the main.go with a new __vlogin__ function for creating the vSphere session.
+### Step 6.1 - Open a session to vSphere ###
+
+__Note:__ The initial version of the code was not very optomized as the code for creating the vCenter session was in the reconciler and was triggered on every reconcile request, which is not ideal. The login function has now been moved out of the reconciler function in the controller, and into __main.go__. Here is the new __vlogin__ function for creating the vSphere session in main.go. One thing to note is that I am enabling insecure logins (true) by default. This is something that you may wish to change in your code.
 
 ```go
 func vlogin(ctx context.Context, vc, user, pwd string) (*vim25.Client, error) {
@@ -402,9 +404,10 @@ func vlogin(ctx context.Context, vc, user, pwd string) (*vim25.Client, error) {
         }
 
         return c, nil
+}
 ```
 
-And within the main function, here is the call to the __vlogin__ function, as well as the updated __HostInfoReconciler__ call with a new field (VC) which has the vSphere session details. This login info can now be used from withing the HostInfoReconciler function, as we will see shortly.
+Within the main function, there is a call to the __vlogin__ function with the parameter received from the environment variables shown below. There is also an updated __HostInfoReconciler__ call with a new field (VC) which has the vSphere session details. This login info can now be used from within the HostInfoReconciler controller function, as we will see shortly.
 
 ```go
         vc := os.Getenv("GOVMOMI_URL")
@@ -427,9 +430,11 @@ And within the main function, here is the call to the __vlogin__ function, as we
         }
 ```
 
-Here is the complete code for [__main.go__](./main.go).
+Click here for the complete [__main.go__](./main.go) code.
 
-Once the business logic is added in the controller, we will need to be able to run it in the Kubernetes cluster. To achieve this, we will build a container image to run the controller logic. This will be provisioned in the Kubernetes cluster using a Deployment manifest. The deployment contains a single Pod that runs the container (it is called __manager__). The deployment ensures that the controller manager Pod is restarted in the event of a failure.
+### Step 6.2 - Controller Reconcile Logic ###
+
+Now we turn our attention to the business logic of the controller. Once the business logic is added in the controller, it will need to be able to run in a Kubernetes cluster. To achieve this, a container image to run the controller logic must be built. This will be provisioned in the Kubernetes cluster using a Deployment manifest. The deployment contains a single Pod that runs the container (it is called __manager__). The deployment ensures that the controller manager Pod is restarted in the event of a failure.
 
 This is what kubebuilder provides as controller scaffolding - it is found in __controllers/hostinfo_controller.go__. We are most interested in the __HostInfoReconciler__ function:
 
@@ -444,7 +449,7 @@ func (r *HostInfoReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 }
 ```
 
-Considering the business logic that I described above, this is what my updated __HostInfoReconciler__ function looks like. Hopefully the comments make is easy to understand, but at the end of the day, when this controller gets a reconcile request (something as simple as a get command will trigger this), the TotalCPU and FreeCPU fields in the status of the Custom Resource are updated for the specific ESXi host in the spec.hostname field. Note that I have omitted a number of required imports that also need to be added to the controller. Refer to the code for the complete [__hostinfo_controller.go__](./controllers/hostinfo_controller.go) code. One thing to note is that I am enabling insecure logins by default. This is something that you may wish to change in your code.
+Considering the business logic that I described above, this is what my updated __HostInfoReconciler__ function looks like. Hopefully the comments make is easy to understand, but at the end of the day, when this controller gets a reconcile request (something as simple as a get command will trigger this), the TotalCPU and FreeCPU fields in the status of the Custom Resource are updated for the specific ESXi host in the spec.hostname field. Note that I have omitted a number of required imports that also need to be added to the controller. Refer to the code for the complete [__hostinfo_controller.go__](./controllers/hostinfo_controller.go) code. 
 
 ```go
 func (r *HostInfoReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
