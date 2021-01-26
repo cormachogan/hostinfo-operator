@@ -899,4 +899,6 @@ kustomize build config/default/ >> /tmp/hostinfo.yaml
 
 This newly created __hostinfo.yaml__ manifest includes the CRD, RBAC, Service and Deployment for rolling out the operator on other Kubernetes clusters. Nice, eh?
 
+You cna also check my other operators tutorials which interact with vSphere. There is a VM Operator [here](https://github.com/cormachogan/vminfo-operator). This allows you to query virtual machine information from K8s.  There is also a First Class Disk (FCD) operator which gets information from a PV that is deployed on vSphere storage. This is available [here](https://github.com/cormachogan/fcdinfo-operator).
+
 Finally, if this exercise has given you a desire to do more exciting stuff with Kubernetes Operators when Kubernetes is running on vSphere, check out the [vmGroup](https://github.com/embano1/codeconnect-vm-operator/blob/main/README.md) operator that my colleague __Micheal Gasch__ created. It will let you deploy and manage a set of virtual machines on your vSphere infrastructure via a Kubernetes operator. Cool stuff for sure.
