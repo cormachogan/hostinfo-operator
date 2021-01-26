@@ -22,7 +22,7 @@ The following will be created as part of this tutorial:
 
 * An __Operator__ (or business logic) to retrieve the Total and Free CPU from the ESXi host specified in the CR will be coded in the controller for this CR.
 
-__Note:__ A similar exercise to create an operator to query virtual machine information. This can be found [here](https://github.com/cormachogan/vminfo-operator).
+__Note:__ A similar exercise creates an operator to query virtual machine information. This can be found [here](https://github.com/cormachogan/vminfo-operator). A third operator creates an operator that gets First Class Disk (FCD) information from a PV that is deployed on vSphere storage. The FCD operator is available [here](https://github.com/cormachogan/fcdinfo-operator).
 
 ## What is not covered in this tutorial? ##
 
@@ -825,7 +825,7 @@ status:
   totalCPU: 43980
 ```
 
-__Success!!!__ Note that the output above is showing us ```freeCPU``` and ```totalCPU``` as per our business logic implemented in the controller. How cool is that? You can now go ahead and create additional HostInfo manifests for different hosts in your vSphere environment managed by your vCenter server by specifying different hostnames in the manifest spec, and all you to get free and total CPU from those ESXi hosts as well.
+__Success!!!__ Note that the output above is showing us ```freeCPU``` and ```totalCPU``` as per our business logic implemented in the controller. How cool is that? You can now go ahead and create additional __HostInfo__ manifests for different hosts in your vSphere environment managed by your vCenter server. This is done by specifying different hostnames in these additional manifests.  This will allow you to get free and total CPU from those ESXi hosts as well.
 
 ## Cleanup ##
 
@@ -889,7 +889,7 @@ The CRD is now removed. At this point, you can also delete the namespace created
 
 ## What next? ##
 
-One thing you could do it to extend the HostInfo fields and Operator logic so that it returns even more information about the ESXi host. You could add additional Status fields that returned memory, host type, host tags, etc. There is a lot of information that can be retrieved via the govmomi __HostSystem__ API call.
+One thing you could do it to extend the HostInfo fields and Operator logic so that it returns even more information about the ESXi host. You could add additional Status fields that return memory, host type, host tags, etc. There is a lot of information that can be retrieved via the govmomi __HostSystem__ API call.
 
 You can now use __kusomtize__ to package the CRD and controller and distribute it to other Kubernetes clusters. Simply point the __kustomize build__ command at the location of the __kustomize.yaml__ file which is in __config/default__.
 
