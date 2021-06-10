@@ -528,7 +528,43 @@ func (r *HostInfoReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 
 With the controller logic now in place, we can now proceed to build the controller / manager.
 
-## Step 7 - Build the controller ##
+## Step 7 - Test the controller ##
+
+Instead of building a container for the controller and adding our manager logic to it, we can test the manager in standalone mode. This will allow us to verify the functionality of our controller before we go to the trouble of building a container, pushing it to a repo, and then pulling it back from the repo when we deploy it in our Kubernetes cluster. We will do that in the next step.
+
+To build the manager code locally, you can run the following __make__ command:
+
+```shell
+make manager
+```
+
+The make output should resemble the following:
+
+```shell
+$ make manager
+/usr/share/go/bin/controller-gen object:headerFile="hack/boilerplate.go.txt" paths="./..."
+go fmt ./...
+go vet ./...
+go build -o bin/manager main.go
+```
+
+This should have build the manager binary in __bin/manager__. Before running the manager in standalone code, we need to set three environmental variables to allow us to connect to the vCenter Server. There are:
+
+```shell
+export GOVMOMI_HOSTNAME=192.168.0.100
+export GOVMOMI_USERNAME=administrator@vsphere.local
+export GOVMOMI_PASSWORD='My_VC_Password'
+```
+
+These are retrieved in the __main.go__ code which we built previously. The manager can now be started in standalone mode:
+
+```shell
+bin/manager
+```
+
+Monitor the startup messages from the manager. If there are no errors, jump to step **11.4** and see if the relevant host information is now available in the status fields of the CR. If the information is present, come back to step 8 where we will begin to build the controller container image.
+
+## Step 8 - Build the controller ##
 
 At this point everything is in place to enable us to deploy the controller to the Kubernete cluster. If you remember back to the prerequisites in step 1, we said that you need access to a container image registry, such as docker.io or quay.io, or VMware's own [Harbor](https://github.com/goharbor/harbor/blob/master/README.md) registry. This is where we need this access to a registry, as we need to push the controller's container image somewhere that can be accessed from your Kubernetes cluster.
 
@@ -636,7 +672,7 @@ $
 
 The container image of the controller is now built and pushed to the container image registry. But we have not yet deployed it. We have to do one or two further modifications before we take that step.
 
-## Step 8 - Modify the Manager manifest to include environment variables ##
+## Step 9 - Modify the Manager manifest to include environment variables ##
 
 Kubebuilder provides a manager manifest scaffold file for deploying the controller. However, since we need to provide vCenter details to our controller, we need to add these to the controller/manager manifest file. This is found in __config/manager/manager.yaml__. This manifest contains the deployment for the controller. In the spec, we need to add an additional __spec.env__ section which has the environment variables defined, as well as the name of our __secret__ (which we will create shortly). Below is a snippet of that code. Here is the code-complete [config/manager/manager.yaml](./config/manager/manager.yaml)).
 
@@ -677,7 +713,7 @@ namespace/hostinfo-system created
 ```shell
 $ kubectl create secret generic vc-creds \
 --from-literal='GOVMOMI_USERNAME=administrator@vsphere.local' \
---from-literal='GOVMOMI_PASSWORD=VMware123!' \
+--from-literal='GOVMOMI_PASSWORD=My_VC_Password' \
 --from-literal='GOVMOMI_URL=192.168.0.100' \
 -n hostinfo-system
 secret/vc-creds created
@@ -685,7 +721,7 @@ secret/vc-creds created
 
 We are now ready to deploy the controller to the Kubernetes cluster.
 
-## Step 9 - Deploy the controller ##
+## Step 10 - Deploy the controller ##
 
 To deploy the controller, we run another __make__ command. This will take care of all of the RBAC, cluster roles and role bindings necessary to run the controller, as well as pinging up the correct image, etc.
 
@@ -715,11 +751,11 @@ service/hostinfo-controller-manager-metrics-service created
 deployment.apps/hostinfo-controller-manager created
 ```
 
-## Step 10 - Check controller functionality ##
+## Step 11 - Check controller functionality ##
 
 Now that our controller has been deployed, let's see if it is working. There are a few different commands that we can run to verify the operator is working.
 
-### Step 10.1 - Check the deployment and replicaset ###
+### Step 11.1 - Check the deployment and replicaset ###
 
 The deployment should be READY. Remember to specify the namespace correctly when checking it.
 
@@ -733,7 +769,7 @@ NAME                          READY   UP-TO-DATE   AVAILABLE   AGE
 hostinfo-controller-manager   1/1     1            1           14m
 ```
 
-### Step 10.2 - Check the Pods ###
+### Step 11.2 - Check the Pods ###
 
 The deployment manages a single controller Pod. There should be 2 containers READY in the controller Pod. One is the __controller / manager__ and the other is the __kube-rbac-proxy__. The [kube-rbac-proxy](https://github.com/brancz/kube-rbac-proxy/blob/master/README.md) is a small HTTP proxy that can perform RBAC authorization against the Kubernetes API. It restricts requests to authorized Pods only.
 
@@ -749,7 +785,7 @@ If you experience issues with the one of the pods not coming online, use the fol
 kubectl describe pod hostinfo-controller-manager-6484c486ff-8vwsn -n hostinfo-system
 ```
 
-### Step 10.3 - Check the controller / manager logs ###
+### Step 11.3 - Check the controller / manager logs ###
 
 If we query the __logs__ on the manager container, we should be able to observe successful startup messages as well as successful reconcile requests from the HostInfo CR that we already deployed back in step 5. These reconcile requests should update the __Status__ fields with CPU information as per our controller logic. The command to query the manager container logs in the controller Pod is as follows:
 
@@ -775,7 +811,7 @@ I1231 16:55:13.035397       1 leaderelection.go:252] successfully acquired lease
 2020-12-31T16:55:13.625Z        INFO    controllers.HostInfo    received reconcile request for "hostinfo-host-e" (namespace: "default") {"hostinfo": "default/hostinfo-host-e"}
 ```
 
-### Step 10.4 - Check if CPU statistics are returned in the status ###
+### Step 11.4 - Check if CPU statistics are returned in the status ###
 
 Last but not least, let's see if we can see the CPU information in the __status__ fields of the HostInfo object created earlier.
 
