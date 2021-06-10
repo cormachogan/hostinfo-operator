@@ -562,6 +562,23 @@ These are retrieved in the __main.go__ code which we built previously. The manag
 bin/manager
 ```
 
+The output should be similar to the following:
+
+```shell
+2020-12-31T16:54:55.633Z        INFO    controller-runtime.metrics      metrics server is starting to listen    {"addr": "127.0.0.1:8080"}
+2020-12-31T16:54:55.634Z        INFO    setup   starting manager
+I1231 16:54:55.634543       1 leaderelection.go:242] attempting to acquire leader lease  hostinfo-system/0df5945b.corinternal.com...
+2020-12-31T16:54:55.635Z        INFO    controller-runtime.manager      starting metrics server {"path": "/metrics"}
+I1231 16:55:13.035397       1 leaderelection.go:252] successfully acquired lease hostinfo-system/0df5945b.corinternal.com
+2020-12-31T16:55:13.035Z        DEBUG   controller-runtime.manager.events       Normal  {"object": {"kind":"ConfigMap","namespace":"hostinfo-system","name":"0df5945b.corinternal.com","uid":"f1f46185-77f5-43d2-ba33-192caed82409","apiVersion":"v1","resourceVersion":"20735459"}, "reason": "LeaderElection", "message": "hostinfo-controller-manager-6484c486ff-8vwsn_510f151d-4e35-4f42-966e-31ddcec34bcb became leader"}
+2020-12-31T16:55:13.035Z        INFO    controller-runtime.controller   Starting EventSource    {"controller": "hostinfo", "source": "kind source: /, Kind="}
+2020-12-31T16:55:13.135Z        INFO    controller-runtime.controller   Starting Controller     {"controller": "hostinfo"}
+2020-12-31T16:55:13.135Z        INFO    controller-runtime.controller   Starting workers        {"controller": "hostinfo", "worker count": 1}
+2020-12-31T16:55:13.136Z        INFO    controllers.HostInfo    received reconcile request for "hostinfo-host-e" (namespace: "default") {"hostinfo": "default/hostinfo-host-e"}
+2020-12-31T16:55:13.625Z        DEBUG   controller-runtime.controller   Successfully Reconciled {"controller": "hostinfo", "request": "default/hostinfo-host-e"}
+2020-12-31T16:55:13.625Z        INFO    controllers.HostInfo    received reconcile request for "hostinfo-host-e" (namespace: "default") {"hostinfo": "default/hostinfo-host-e"}
+```
+
 Monitor the startup messages from the manager. If there are no errors, jump to step **11.4** and see if the relevant host information is now available in the status fields of the CR. If the information is present, come back to step 8 where we will begin to build the controller container image.
 
 ## Step 8 - Build the controller ##
